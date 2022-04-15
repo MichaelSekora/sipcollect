@@ -11,7 +11,7 @@ sipcollect builds with cmake, installation requirements are
 - g++
 - pkg-config
 - cmake
-- libpcap
+- libpcap 1.9 or later
 - libmysqlclient
 
 The installation script `install.sh` will take care of the libraries, but g++, pkg-config and cmake need to be there at first.
