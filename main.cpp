@@ -22,21 +22,21 @@ int main(int argc, char *argv[])
   dbname = readconfig.dbname;
   dbuser = readconfig.dbuser;
   dbpasswd = readconfig.dbpasswd;
-  
-  std::string str=readconfig.packet_filter;
-  char packet_filter[str.length() + 1]; 
-  strcpy(packet_filter, str.c_str()); 
-  
-  int result_conndb= connectdb();
+
+  std::string str = readconfig.packet_filter;
+  char packet_filter[str.length() + 1];
+  strcpy(packet_filter, str.c_str());
+
+  int result_conndb = connectdb();
 
   char errbuf[PCAP_ERRBUF_SIZE];
   pcap_if_t *alldevs;
   pcap_if_t *d;
-  int i=0;
-  int inum=0;
+  int i = 0;
+  int inum = 0;
   pcap_t *adhandle;
   struct bpf_program fcode;
-  void packet_handler(u_char *dumpfile, const struct pcap_pkthdr *header, const u_char *pkt_data);
+  void packet_handler(u_char * dumpfile, const struct pcap_pkthdr *header, const u_char *pkt_data);
 
   if (pcap_findalldevs(&alldevs, errbuf) == -1)
   {
@@ -53,7 +53,7 @@ int main(int argc, char *argv[])
       printf(" (No description available)\n");
   }
 
-  inum=atoi(argv[1]);
+  inum = atoi(argv[1]);
   printf("\r\ninterface1: %d\r\n", inum);
 
   if (i == 0)
@@ -61,7 +61,7 @@ int main(int argc, char *argv[])
     printf("\nNo interfaces found!\n");
     return -1;
   }
-  
+
   if (inum < 1 || inum > i)
   {
     printf("\nAdapter number out of range.\n");
@@ -69,34 +69,35 @@ int main(int argc, char *argv[])
     return -1;
   }
 
-  for (d = alldevs, i = 0; i< inum - 1; d = d->next, i++);
+  for (d = alldevs, i = 0; i < inum - 1; d = d->next, i++)
+    ;
 
-  if ((adhandle = pcap_open_live(d->name,	65536, 1,	100, errbuf)) == NULL)
+  if ((adhandle = pcap_open_live(d->name, 65536, 1, 100, errbuf)) == NULL)
   {
-      fprintf(stderr, "\nUnable to open adapter.p\n");
-      pcap_freealldevs(alldevs);
-      return -1;
+    fprintf(stderr, "\nUnable to open adapter.p\n");
+    pcap_freealldevs(alldevs);
+    return -1;
   }
 
   if (pcap_datalink(adhandle) != DLT_EN10MB)
   {
-      fprintf(stderr, "\nEthernet only.\n");
-      pcap_freealldevs(alldevs);
-      return -1;
+    fprintf(stderr, "\nEthernet only.\n");
+    pcap_freealldevs(alldevs);
+    return -1;
   }
 
-  if (pcap_compile(adhandle, &fcode, packet_filter, 1, 0xffffff) <0)
+  if (pcap_compile(adhandle, &fcode, packet_filter, 1, 0xffffff) < 0)
   {
-      fprintf(stderr, "\nUnable to compile the packet filter. Check the syntax.\n");
-      pcap_freealldevs(alldevs);
-      return -1;
+    fprintf(stderr, "\nUnable to compile the packet filter. Check the syntax.\n");
+    pcap_freealldevs(alldevs);
+    return -1;
   }
 
-  if (pcap_setfilter(adhandle, &fcode)<0)
+  if (pcap_setfilter(adhandle, &fcode) < 0)
   {
-      fprintf(stderr, "\nError setting the filter.\n");
-      pcap_freealldevs(alldevs);
-      return -1;
+    fprintf(stderr, "\nError setting the filter.\n");
+    pcap_freealldevs(alldevs);
+    return -1;
   }
 
   printf("\nlistening on %s...\n", d->name);
@@ -105,8 +106,3 @@ int main(int argc, char *argv[])
   pcap_freealldevs(alldevs);
   return 0;
 }
-
-
-
-
-
