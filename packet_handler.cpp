@@ -189,6 +189,8 @@ void packet_handler(u_char *dumpfile, const struct pcap_pkthdr *header, const u_
 	char udpstrtmp2[65535];
 	struct tm *ltime;
 	u_int ip_len;
+	u_char eth_type_part1;
+	u_char eth_type_part2;
 	u_short sport, dport, len;
 	time_t local_tv_sec;
 	char timestr[64];
@@ -206,8 +208,20 @@ void packet_handler(u_char *dumpfile, const struct pcap_pkthdr *header, const u_
 	strftime(timestr, sizeof timestr, "%Y-%m-%d %H:%M:%S", ltime);
 
 	snprintf(usec, sizeof usec, "%s.%06ld", timestr, header->ts.tv_usec);
-
-	ih = (ip_header *)(pkt_data + 14); // length of ethernet header
+	
+	// check if type is VLAN ( 81 00 )
+	eth_type_part1 = (u_char)(pkt_data + 12)[0];
+	eth_type_part2 = (u_char)(pkt_data + 12)[1];
+	
+	if ((u_int)eth_type_part1 == 129 && (u_int)eth_type_part2 == 0)
+	{
+		ih = (ip_header *)(pkt_data + 18); // length of ethernet header
+	}
+	else
+	{
+		ih = (ip_header *)(pkt_data + 14); // length of ethernet header
+	}
+		
 
 	u_char ip_proto = ih->proto;
 
