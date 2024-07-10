@@ -64,6 +64,7 @@ typedef struct udp_data
 	u_char UDPdata_c;
 } udp_data;
 
+
 ip_header *ih;
 udp_header *uh;
 udp_data *UDPdata;
@@ -196,6 +197,7 @@ void packet_handler(u_char *dumpfile, const struct pcap_pkthdr *header, const u_
 	char timestr[64];
 	char usec[76];
 	int b = 0;
+	
 	while (b < 65535)
 	{
 		udpstrtmp[b] = '\0';
@@ -213,6 +215,8 @@ void packet_handler(u_char *dumpfile, const struct pcap_pkthdr *header, const u_
 	eth_type_part1 = (u_char)(pkt_data + 12)[0];
 	eth_type_part2 = (u_char)(pkt_data + 12)[1];
 	
+
+    //if (eth_type_part1 == '\x81' && eth_type_part2 == '\x00')
 	if ((u_int)eth_type_part1 == 129 && (u_int)eth_type_part2 == 0)
 	{
 		ih = (ip_header *)(pkt_data + 18); // length of ethernet header
@@ -222,6 +226,7 @@ void packet_handler(u_char *dumpfile, const struct pcap_pkthdr *header, const u_
 		ih = (ip_header *)(pkt_data + 14); // length of ethernet header
 	}
 		
+
 
 	u_char ip_proto = ih->proto;
 
@@ -258,8 +263,10 @@ void packet_handler(u_char *dumpfile, const struct pcap_pkthdr *header, const u_
 		len = 0;
 	}
 
-	if (len > 0)
+	if (len > 0 )
 	{
+		//cout << "\nlen:" << len;
+		
 		memcpy(udpstrtmp, UDPdata, len);
 	}
 
@@ -279,9 +286,11 @@ void packet_handler(u_char *dumpfile, const struct pcap_pkthdr *header, const u_
 	string dstport = to_string(dport);
 	string datetime(usec);
 	int conversion_result = mysql_real_escape_string(conn, udpstrtmp2, udpstrtmp, strlen(udpstrtmp));
-	string content(udpstrtmp2);
-
-	// cout << "\nCall-ID: " << callid;
+	char* content_escaped = new char[10000];
+    int success = mysql_real_escape_string(conn, content_escaped, udpstrtmp2, 1500);
+	string content(content_escaped);
+	delete content_escaped;
+	
 
 	if (query_counter == 0)
 	{
@@ -293,7 +302,8 @@ void packet_handler(u_char *dumpfile, const struct pcap_pkthdr *header, const u_
 	}
 
 	query_counter++;
-	if (query_counter > 9)
+	
+	if (query_counter > 0)
 	{
 
 		string query_part123 = query_part1 + query_part2 + query_part3;
@@ -307,19 +317,33 @@ void packet_handler(u_char *dumpfile, const struct pcap_pkthdr *header, const u_
 
 		if (*mysql_error(conn))
 		{
+			printf("\n** ERROR BEGIN ********************************************************************************************************************************************************************************************\n");
 			printf("\n******\nmysql-error:%s\n", result);
+			printf("\n******\nquery:%s\n", query);
+			
+			printf("\n*************************************************\n");
+			printf("\n*************************************************\n");
+			printf("\n******\ncontent:%s\n", content);
+			printf("\n*************************************************\n");
+			printf("\n******\nCall-ID:%s\n", callid);
+			printf("\n*************************************************\n");
+			
+
+			printf("\n** ERROR END ********************************************************************************************************************************************************************************************\n");
+			
 			mysqlpresent = false;
 			connectdb();
-			sleep(5);
+			sleep(1);
 		}
 		for (; mysql_next_result(conn) == 0;)
-			/* do nothing */;
 		mysql_free_result(result);
 		query_counter = 0;
 		delete[] query;
 		free(result);
 	}
+	
 
 	delete callid;
 	callid = NULL;
 }
+
