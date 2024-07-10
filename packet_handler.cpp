@@ -303,7 +303,7 @@ void packet_handler(u_char *dumpfile, const struct pcap_pkthdr *header, const u_
 
 	query_counter++;
 	
-	if (query_counter > 0)
+	if (query_counter > 29)
 	{
 
 		string query_part123 = query_part1 + query_part2 + query_part3;
