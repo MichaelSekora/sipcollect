@@ -10,6 +10,8 @@
 #include <string.h>
 using namespace std;
 
+bool use_database=true;
+
 std::string dbhost;
 std::string dbname;
 std::string dbuser;
@@ -27,8 +29,10 @@ int main(int argc, char *argv[])
   char packet_filter[str.length() + 1];
   strcpy(packet_filter, str.c_str());
 
-  int result_conndb = connectdb();
-
+  if (use_database==true)
+  {
+    int result_conndb = connectdb();
+  }
   char errbuf[PCAP_ERRBUF_SIZE];
   pcap_if_t *alldevs;
   pcap_if_t *d;
