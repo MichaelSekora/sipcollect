@@ -9,11 +9,12 @@
 using namespace std;
 
 extern MYSQL *conn;
+extern bool use_database;
 extern bool mysqlpresent;
 extern std::string dbname;
 
 string query_part2 = "";
-string query_part3 = ";";
+string query_part3 = "; ";
 int query_counter = 0;
 
 typedef struct ip_address
@@ -31,7 +32,8 @@ typedef struct ip_header
 	u_char tos;
 	u_short tlen;
 	u_short identification;
-	u_short flags_fo;
+	u_char flags;
+	u_char fragment_offset;
 	u_char ttl;
 	u_char proto;
 	u_short crc;
@@ -71,6 +73,7 @@ udp_data *UDPdata;
 tcp_header *th;
 ip_address srcaddr;
 ip_address dstaddr;
+
 
 char *concat(int count, ...)
 {
@@ -186,25 +189,23 @@ void packet_handler(u_char *dumpfile, const struct pcap_pkthdr *header, const u_
 	string query_part1 = "INSERT INTO " + dbname + ".sip (`callid`, `datetime`, \
   `srcip`, `srcport`, `dstip`, `dstport`, `content`) VALUES ";
 
-	char udpstrtmp[65535];
-	char udpstrtmp2[65535];
+	char udpstrtmp[5000];
+	char udpstrtmp2[5000];
 	struct tm *ltime;
 	u_int ip_len;
 	u_char eth_type_part1;
 	u_char eth_type_part2;
-	u_short sport, dport, len;
+	u_short sport, dport, len, ip_identification;
+	u_char ip_flags;
+	u_char ip_fragment_offset;
 	time_t local_tv_sec;
 	char timestr[64];
 	char usec[76];
 	int b = 0;
 	
-	while (b < 65535)
-	{
-		udpstrtmp[b] = '\0';
-		udpstrtmp2[b] = '\0';
-		b++;
-	}
-
+	memset(udpstrtmp, '\0', sizeof(udpstrtmp));
+	memset(udpstrtmp2, '\0', sizeof(udpstrtmp2));
+	
 	local_tv_sec = header->ts.tv_sec;
 	ltime = gmtime(&local_tv_sec);
 	strftime(timestr, sizeof timestr, "%Y-%m-%d %H:%M:%S", ltime);
@@ -229,6 +230,11 @@ void packet_handler(u_char *dumpfile, const struct pcap_pkthdr *header, const u_
 
 
 	u_char ip_proto = ih->proto;
+
+	ip_identification = ih->identification;
+	ip_flags = ih->flags;
+	ip_fragment_offset = ih->fragment_offset;
+	
 
 	/* retrieve the position of the udp/tcp header */
 	ip_len = (ih->ver_ihl & 0xf) * 4;
@@ -263,86 +269,164 @@ void packet_handler(u_char *dumpfile, const struct pcap_pkthdr *header, const u_
 		len = 0;
 	}
 
-	if (len > 0 )
+	if (len > 0)
 	{
-		//cout << "\nlen:" << len;
+		/*
+		printf("\n-----------------------------------");
+		printf("\nip_identification: %u", ip_identification);
+		printf("\nip_flags: %u", ip_flags);
+		printf("\nip_fragment_offset: %u", ip_fragment_offset);
+		printf("\npaketlaenge: %u\n", len);
+		printf("\n-----------------------------------\n");
 		
+		cout << "\nlen:" << len << "\n";
+		//printf("\nUDPdata:%p\n", UDPdata);
+		/*
+		*/
 		memcpy(udpstrtmp, UDPdata, len);
+		/*
+		cout << "\nudpstrtmp:" << udpstrtmp << "\n";
+		*/
 	}
 
-	char *callid = extractheader(udpstrtmp, (char *)"\nCall-ID:");
 
-	string srcip1 = to_string(srcaddr.byte1);
-	string srcip2 = to_string(srcaddr.byte2);
-	string srcip3 = to_string(srcaddr.byte3);
-	string srcip4 = to_string(srcaddr.byte4);
-	string dstip1 = to_string(dstaddr.byte1);
-	string dstip2 = to_string(dstaddr.byte2);
-	string dstip3 = to_string(dstaddr.byte3);
-	string dstip4 = to_string(dstaddr.byte4);
-	string srcip = srcip1 + "." + srcip2 + "." + srcip3 + "." + srcip4;
-	string srcport = to_string(sport);
-	string dstip = dstip1 + "." + dstip2 + "." + dstip3 + "." + dstip4;
-	string dstport = to_string(dport);
-	string datetime(usec);
-	int conversion_result = mysql_real_escape_string(conn, udpstrtmp2, udpstrtmp, strlen(udpstrtmp));
-	char* content_escaped = new char[10000];
-    int success = mysql_real_escape_string(conn, content_escaped, udpstrtmp2, 1500);
-	string content(content_escaped);
-	delete content_escaped;
-	
-
-	if (query_counter == 0)
+	//printf("\nudpstrtmp: %s", udpstrtmp);
+	int i2=0;
+	for (int i = 0; i <  sizeof(udpstrtmp); i++)
 	{
-		query_part2 = "('" + string(callid) + "', '" + datetime + "', '" + srcip + "', '" + srcport + "', '" + dstip + "', '" + dstport + "', '" + content + "')";
-	}
-	else
-	{
-		query_part2 = query_part2 + ", " + "('" + callid + "', '" + datetime + "', '" + srcip + "', '" + srcport + "', '" + dstip + "', '" + dstport + "', '" + content + "')";
-	}
-
-	query_counter++;
-	
-	if (query_counter > 29)
-	{
-
-		string query_part123 = query_part1 + query_part2 + query_part3;
-
-		int query_part123_size = query_part123.size();
-		char *query = new char[query_part123_size + 1];
-		query_part123.copy(query, query_part123_size + 1);
-		query[query_part123_size] = '\0';
-		MYSQL_RES *result;
-		result = mysql_perform_query(conn, query);
-
-		if (*mysql_error(conn))
+		//if (isprint(static_cast<unsigned char>(udpstrtmp[i])) && udpstrtmp[i] < 128)
+		if (udpstrtmp[i] < 128 && udpstrtmp[i] > -1)
 		{
-			printf("\n** ERROR BEGIN ********************************************************************************************************************************************************************************************\n");
-			printf("\n******\nmysql-error:%s\n", result);
-			printf("\n******\nquery:%s\n", query);
-			
-			printf("\n*************************************************\n");
-			printf("\n*************************************************\n");
-			printf("\n******\ncontent:%s\n", content);
-			printf("\n*************************************************\n");
-			printf("\n******\nCall-ID:%s\n", callid);
-			printf("\n*************************************************\n");
-			
-
-			printf("\n** ERROR END ********************************************************************************************************************************************************************************************\n");
-			
-			mysqlpresent = false;
-			connectdb();
-			sleep(1);
+			udpstrtmp2[i2] = udpstrtmp[i];
+			i2++;
+			//printf("\ni2: %d", i2);
 		}
-		for (; mysql_next_result(conn) == 0;)
-		mysql_free_result(result);
-		query_counter = 0;
-		delete[] query;
-		free(result);
+		else
+		{
+			//printf("\nudpstrtmp[%d]: %d\n", i, udpstrtmp[i]);
+		}
 	}
+	//printf("\nudpstrtmp2: %s", udpstrtmp2);
+
+	memset(udpstrtmp, '\0', sizeof(udpstrtmp));
+	memcpy(udpstrtmp, udpstrtmp2, sizeof(udpstrtmp2));
+	
+	//printf("\n2---udpstrtmp: %s", udpstrtmp);
+	
+	char *callid = extractheader(udpstrtmp, (char *)"\nCall-ID:");
+   char callid_escaped[200];
+	memset(callid_escaped, '\0', sizeof(callid_escaped));
 	
 
+	string callidstring(callid);
+	u_int callid_len = callidstring.size();
+	if (callid_len > 5)
+	{
+		string srcip1 = to_string(srcaddr.byte1);
+		string srcip2 = to_string(srcaddr.byte2);
+		string srcip3 = to_string(srcaddr.byte3);
+		string srcip4 = to_string(srcaddr.byte4);
+		string dstip1 = to_string(dstaddr.byte1);
+		string dstip2 = to_string(dstaddr.byte2);
+		string dstip3 = to_string(dstaddr.byte3);
+		string dstip4 = to_string(dstaddr.byte4);
+		string srcip = srcip1 + "." + srcip2 + "." + srcip3 + "." + srcip4;
+		string srcport = to_string(sport);
+		string dstip = dstip1 + "." + dstip2 + "." + dstip3 + "." + dstip4;
+		string dstport = to_string(dport);
+		string datetime(usec);
+
+		char* content_escaped = new char[10001];
+		memset(content_escaped, '\0', sizeof(content_escaped));	
+   	if (use_database==true)
+		{
+			int result = mysql_real_escape_string(conn, content_escaped, udpstrtmp, strlen(udpstrtmp));
+			result = mysql_real_escape_string(conn, callid_escaped, callid, strlen(callid));
+		}
+		else
+		{
+			memcpy(content_escaped, udpstrtmp, sizeof(udpstrtmp));
+		}
+
+		string content(content_escaped);
+		delete content_escaped;
+
+		if (len > 100000)
+		{
+			printf("\n-----------------------------------");
+			printf("\nip_identification: %u", ip_identification);
+			printf("\nip_flags: %u", ip_flags);
+			printf("\nip_fragment_offset: %u", ip_fragment_offset);
+			printf("\npaketlaenge: %u\n", len);
+			printf("\ncontent%s", content.c_str());
+			printf("\n-----------------------------------\n");
+		}
+
+
+		if (use_database==true)
+		{
+			if (query_counter == 0)
+			{
+				query_part2 = "('" + string(callid_escaped) + "', '" + datetime + "', '" + srcip + "', '" + srcport + "', '" + dstip + "', '" + dstport + "', '" + content + "')";
+			}
+			else
+			{
+				query_part2 = query_part2 + ", " + "('" + string(callid_escaped) + "', '" + datetime + "', '" + srcip + "', '" + srcport + "', '" + dstip + "', '" + dstport + "', '" + content + "')";
+			}
+
+			query_counter++;
+
+			if (query_counter > 10)
+			{
+
+				string query_part123 = query_part1 + query_part2 + query_part3;
+
+				int query_part123_size = query_part123.length();
+				char *query = new char[query_part123_size+1];
+				memset(query, 0, sizeof(query));	
+				strcpy(query, query_part123.c_str()); 
+
+				MYSQL_RES *result;
+				result = mysql_perform_query(conn, query);
+
+				if (*mysql_error(conn))
+				{
+
+					printf("\n** ERROR BEGIN ********************************************************************************************************************************************************************************************\n");
+					printf("\n******\nmysql-error:%s\n", result);
+					printf("\n******\nquery:%s\n", query);
+					printf("\n******\nquerypart123:%s\n", query_part123.c_str());
+					printf("\n*************************************************\n");
+					printf("\n******\ncontent:%s\n", content.c_str());
+					printf("\n*************************************************\n");
+					printf("\n******\nCall-ID:%s\n", callid_escaped);
+					printf("\n*************************************************\n");
+
+
+					printf("\n** ERROR END ********************************************************************************************************************************************************************************************\n");
+					/*
+					*/
+					mysqlpresent = false;
+
+					exit(1);
+					//connectdb();
+					//sleep(1);
+				}
+				else
+				{
+					//printf("\n******** INSERT SUCCESS *****************************************\n");
+					//printf(".");
+				}
+				for (; mysql_next_result(conn) == 0;)
+				mysql_free_result(result);
+				query_counter = 0;
+				memset(query, '\0', sizeof(query));
+				delete[] query;
+				free(result);
+			}
+
+		}
+	}
 	delete callid;
 	callid = NULL;
 }
