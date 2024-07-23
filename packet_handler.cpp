@@ -1,4 +1,6 @@
+#include "mysql_handler.h"
 #include <bits/stdc++.h>
+#include <iostream>
 #include <mysql.h>
 #include <pcap.h>
 #include <stdio.h>
@@ -6,13 +8,9 @@
 #include <string.h>
 #include <unistd.h>
 
-#include <iostream>
-
-#include "mysql_handler.h"
-
 using namespace std;
 
-extern MYSQL *conn;
+extern MYSQL* conn;
 extern bool use_database;
 extern bool mysqlpresent;
 extern std::string dbname;
@@ -23,7 +21,8 @@ int query_counter = 0;
 map<u_short, string> sip_fragment;
 bool wait_for_more = false;
 
-typedef struct ip_address {
+typedef struct ip_address
+{
   u_char byte1;
   u_char byte2;
   u_char byte3;
@@ -31,7 +30,8 @@ typedef struct ip_address {
 } ip_address;
 
 // IPv4 header
-typedef struct ip_header {
+typedef struct ip_header
+{
   u_char ver_ihl;
   u_char tos;
   u_short tlen;
@@ -47,7 +47,8 @@ typedef struct ip_header {
 } ip_header;
 
 // UDP header
-typedef struct udp_header {
+typedef struct udp_header
+{
   u_short sport;
   u_short dport;
   u_short len;
@@ -56,7 +57,8 @@ typedef struct udp_header {
 // 8 byte
 
 // TCP header
-typedef struct tcp_header {
+typedef struct tcp_header
+{
   u_short sport;
   u_short dport;
   u_int sequence;
@@ -65,32 +67,36 @@ typedef struct tcp_header {
 } tcp_header;
 // 13 byte
 
-typedef struct udp_data {
+typedef struct udp_data
+{
   u_char UDPdata_c;
 } udp_data;
 
-ip_header *ih;
-udp_header *uh;
-udp_data *UDPdata;
-tcp_header *th;
+ip_header* ih;
+udp_header* uh;
+udp_data* UDPdata;
+tcp_header* th;
 ip_address srcaddr;
 ip_address dstaddr;
 
-char *concat(int count, ...) {
+char*
+concat(int count, ...)
+{
   va_list ap;
   int i;
 
-  size_t len = 1;  // room for NULL
+  size_t len = 1; // room for NULL
   va_start(ap, count);
-  for (i = 0; i < count; i++) len += strlen(va_arg(ap, char *));
+  for (i = 0; i < count; i++)
+    len += strlen(va_arg(ap, char*));
   va_end(ap);
 
-  char *merged = (char *)calloc(sizeof(char), len + 1);
+  char* merged = (char*)calloc(sizeof(char), len + 1);
   size_t null_pos = 0;
 
   va_start(ap, count);
   for (i = 0; i < count; i++) {
-    char *s = va_arg(ap, char *);
+    char* s = va_arg(ap, char*);
     strcpy(merged + null_pos, s);
     null_pos += strlen(s);
   }
@@ -98,7 +104,9 @@ char *concat(int count, ...) {
   return merged;
 }
 
-char *extractheader(char *haystack, char *needle) {
+char*
+extractheader(char* haystack, char* needle)
+{
   int y = 0;
   size_t h = 0;
   size_t p = 0;
@@ -107,7 +115,7 @@ char *extractheader(char *haystack, char *needle) {
   size_t callidstart = 0;
   size_t haylen = strlen(haystack);
   size_t neelen = strlen(needle);
-  char needle1[500] = {0};
+  char needle1[500] = { 0 };
   size_t ne = 0;
   for (ne = 0; ne < strlen(needle); ne++) {
     needle1[ne] = needle[ne];
@@ -120,7 +128,7 @@ char *extractheader(char *haystack, char *needle) {
   }
   needle1[ne + 1] = '\0';
 
-  char *resultstr1 = new char[1024];
+  char* resultstr1 = new char[1024];
   int i = 0;
   for (i = 0; i < 1024; i++) {
     resultstr1[i] = '\0';
@@ -133,8 +141,7 @@ char *extractheader(char *haystack, char *needle) {
         if (haystack[h + 1] == needle[1] || haystack[h + 1] == needle1[1]) {
           match = 1;
           for (p = 0; p < neelen - 1; p++) {
-            if (haystack[h + 1 + p] != needle[p + 1] &&
-                haystack[h + 1 + p] != needle1[p + 1]) {
+            if (haystack[h + 1 + p] != needle[p + 1] && haystack[h + 1 + p] != needle1[p + 1]) {
               match = 0;
               break;
             }
@@ -151,8 +158,7 @@ char *extractheader(char *haystack, char *needle) {
               }
             }
             callidcounter = callidstart;
-            while (haystack[callidcounter] != '\r' &&
-                   haystack[callidcounter] != '\n' && y < 1020) {
+            while (haystack[callidcounter] != '\r' && haystack[callidcounter] != '\n' && y < 1020) {
               resultstr1[y] = haystack[callidcounter];
               callidcounter++;
               y++;
@@ -168,16 +174,16 @@ char *extractheader(char *haystack, char *needle) {
   return resultstr1;
 }
 
-void packet_handler(u_char *dumpfile, const struct pcap_pkthdr *header,
-                    const u_char *pkt_data) {
+void
+packet_handler(u_char* dumpfile, const struct pcap_pkthdr* header, const u_char* pkt_data)
+{
   wait_for_more = false;
-  string query_part1 = "INSERT INTO " + dbname +
-                       ".sip (`callid`, `datetime`, \
+  string query_part1 = "INSERT INTO " + dbname + ".sip (`callid`, `datetime`, \
   `srcip`, `srcport`, `dstip`, `dstport`, `content`) VALUES ";
 
   char udpstrtmp[5000];
   char udpstrtmp2[5000];
-  struct tm *ltime;
+  struct tm* ltime;
   u_int ip_len;
   u_char eth_type_part1;
   u_char eth_type_part2;
@@ -204,9 +210,9 @@ void packet_handler(u_char *dumpfile, const struct pcap_pkthdr *header,
 
   // if (eth_type_part1 == '\x81' && eth_type_part2 == '\x00')
   if ((u_int)eth_type_part1 == 129 && (u_int)eth_type_part2 == 0) {
-    ih = (ip_header *)(pkt_data + 18);  // length of ethernet header
+    ih = (ip_header*)(pkt_data + 18); // length of ethernet header
   } else {
-    ih = (ip_header *)(pkt_data + 14);  // length of ethernet header
+    ih = (ip_header*)(pkt_data + 14); // length of ethernet header
   }
 
   // ih = IP4-Layer
@@ -223,13 +229,13 @@ void packet_handler(u_char *dumpfile, const struct pcap_pkthdr *header,
   int tcpudplen = 8;
   // get length of udp/tcp header and set tcpudplen (minimum 8)
   if (ip_proto == 6) {
-    th = (tcp_header *)((u_char *)ih + ip_len);
+    th = (tcp_header*)((u_char*)ih + ip_len);
     if (ip_fragment_offset == 0) {
       tcpudplen = (int)(th->offset >> 4) * 4;
     } else {
       tcpudplen = 0;
     }
-    UDPdata = (udp_data *)((u_char *)th + tcpudplen);
+    UDPdata = (udp_data*)((u_char*)th + tcpudplen);
     sport = ntohs(th->sport);
     dport = ntohs(th->dport);
     u_short tlen = ntohs(ih->tlen);
@@ -237,14 +243,14 @@ void packet_handler(u_char *dumpfile, const struct pcap_pkthdr *header,
   }
 
   if (ip_proto == 17) {
-    uh = (udp_header *)((u_char *)ih + ip_len);
+    uh = (udp_header*)((u_char*)ih + ip_len);
     if (ip_fragment_offset == 0) {
       tcpudplen = 8;
     } else {
       tcpudplen = 0;
     }
 
-    UDPdata = (udp_data *)((u_char *)uh + tcpudplen);
+    UDPdata = (udp_data*)((u_char*)uh + tcpudplen);
     sport = ntohs(uh->sport);
     dport = ntohs(uh->dport);
     u_short tlen = ntohs(ih->tlen);
@@ -262,11 +268,11 @@ void packet_handler(u_char *dumpfile, const struct pcap_pkthdr *header,
     if ((1 & (ip_flags >> 5))) {
       memset(udpstrtmp, '\0', sizeof(udpstrtmp));
       memcpy(udpstrtmp, UDPdata, len);
-      sip_fragment.insert({ip_identification, string(udpstrtmp)});
+      sip_fragment.insert({ ip_identification, string(udpstrtmp) });
 
       /*
-      printf ("\n=============================== udpstrtmp when more fragments
-==========================\n"); for(int i = 0; i < 2000; i++)
+      printf ("\n=============================== udpstrtmp when more fragments ==========================\n");
+      for(int i = 0; i < 2000; i++)
 {
       printf("%02x ", udpstrtmp[i]);
 }
@@ -296,7 +302,7 @@ void packet_handler(u_char *dumpfile, const struct pcap_pkthdr *header,
         strcpy(udpstrtmp, content_tmp.c_str());
       }
 
-      char *callid = extractheader(udpstrtmp, (char *)"\nCall-ID:");
+      char* callid = extractheader(udpstrtmp, (char*)"\nCall-ID:");
       char callid_escaped[200];
       memset(callid_escaped, '\0', sizeof(callid_escaped));
 
@@ -317,13 +323,11 @@ void packet_handler(u_char *dumpfile, const struct pcap_pkthdr *header,
         string dstport = to_string(dport);
         string datetime(usec);
 
-        char *content_escaped = new char[10001];
+        char* content_escaped = new char[10001];
         memset(content_escaped, '\0', sizeof(content_escaped));
         if (use_database == true) {
-          int result = mysql_real_escape_string(conn, content_escaped,
-                                                udpstrtmp, strlen(udpstrtmp));
-          result = mysql_real_escape_string(conn, callid_escaped, callid,
-                                            strlen(callid));
+          int result = mysql_real_escape_string(conn, content_escaped, udpstrtmp, strlen(udpstrtmp));
+          result = mysql_real_escape_string(conn, callid_escaped, callid, strlen(callid));
         } else {
           memcpy(content_escaped, udpstrtmp, sizeof(udpstrtmp));
         }
@@ -333,36 +337,32 @@ void packet_handler(u_char *dumpfile, const struct pcap_pkthdr *header,
 
         if (use_database == true) {
           if (query_counter == 0) {
-            query_part2 = "('" + string(callid_escaped) + "', '" + datetime +
-                          "', '" + srcip + "', '" + srcport + "', '" + dstip +
-                          "', '" + dstport + "', '" + content + "')";
+            query_part2 = "('" + string(callid_escaped) + "', '" + datetime + "', '" + srcip + "', '" + srcport +
+                          "', '" + dstip + "', '" + dstport + "', '" + content + "')";
           } else {
-            query_part2 = query_part2 + ", " + "('" + string(callid_escaped) +
-                          "', '" + datetime + "', '" + srcip + "', '" +
-                          srcport + "', '" + dstip + "', '" + dstport + "', '" +
-                          content + "')";
+            query_part2 = query_part2 + ", " + "('" + string(callid_escaped) + "', '" + datetime + "', '" + srcip +
+                          "', '" + srcport + "', '" + dstip + "', '" + dstport + "', '" + content + "')";
           }
 
           query_counter++;
 
           if (query_counter > 10) {
+
             string query_part123 = query_part1 + query_part2 + query_part3;
 
             int query_part123_size = query_part123.length();
-            char *query = new char[query_part123_size + 1];
+            char* query = new char[query_part123_size + 1];
             memset(query, 0, sizeof(query));
             strcpy(query, query_part123.c_str());
 
-            MYSQL_RES *result;
+            MYSQL_RES* result;
             result = mysql_perform_query(conn, query);
 
             if (*mysql_error(conn)) {
-              printf(
-                  "\n** ERROR BEGIN "
-                  "************************************************************"
-                  "************************************************************"
-                  "************************************************************"
-                  "********\n");
+
+              printf("\n** ERROR BEGIN "
+                     "*************************************************************************************************"
+                     "*******************************************************************************************\n");
               printf("\n******\nmysql-error:%s\n", result);
               printf("\n******\nquery:%s\n", query);
               printf("\n******\nquerypart123:%s\n", query_part123.c_str());
@@ -372,19 +372,17 @@ void packet_handler(u_char *dumpfile, const struct pcap_pkthdr *header,
               printf("\n******\nCall-ID:%s\n", callid_escaped);
               printf("\n*************************************************\n");
 
-              printf(
-                  "\n** ERROR END "
-                  "************************************************************"
-                  "************************************************************"
-                  "************************************************************"
-                  "********\n");
+              printf("\n** ERROR END "
+                     "*************************************************************************************************"
+                     "*******************************************************************************************\n");
               /*
                */
               mysqlpresent = false;
               exit(1);
             } else
 
-              for (; mysql_next_result(conn) == 0;) mysql_free_result(result);
+              for (; mysql_next_result(conn) == 0;)
+                mysql_free_result(result);
             query_counter = 0;
             memset(query, '\0', sizeof(query));
             delete[] query;
