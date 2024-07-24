@@ -7,6 +7,7 @@
 #include "mysql_handler.h"
 #include <unistd.h>
 #include <bits/stdc++.h>
+#include <ctime>
 
 using namespace std;
 
@@ -19,7 +20,11 @@ string query_part2 = "";
 string query_part3 = "; ";
 int query_counter = 0;
 map<u_short, string> sip_fragment;
+map<u_short, u_int> sip_fragment_age;
+
 bool wait_for_more = false;
+int last_number_of_entries=0;
+int counter_l=0;
 
 typedef struct ip_address
 {
@@ -190,6 +195,45 @@ char *extractheader(char *haystack, char *needle)
 
 void packet_handler(u_char *dumpfile, const struct pcap_pkthdr *header, const u_char *pkt_data)
 {
+	// maintain (delete) old entries from map sip_fragment
+	u_int number_of_entries = sip_fragment.size();
+	counter_l++;
+	if (counter_l > 100 && number_of_entries > 20)
+	{
+		last_number_of_entries = number_of_entries;
+		//printf("\n-------------------\n%u", number_of_entries);
+		//for (auto it1 = sip_fragment.begin(); it1 != sip_fragment.end();)
+		auto it1=sip_fragment.begin();
+		u_int time_now2 = (int)time(nullptr);
+		//for (int i77 = 0; i77 < 10; i77++)
+    	for (auto it1 = sip_fragment.begin(); it1 != sip_fragment.end();)
+		{
+		
+			//it1 = sip_fragment.begin();
+			u_short ip_ident2 = it1->first;
+        	u_int age = sip_fragment_age.at(ip_ident2);
+			/*
+			printf("\n%u  ", ip_ident2);
+			printf("  %d", age);
+			printf("  %d", time_now2);
+			/**/
+			if ((time_now2 - age) > 10)
+			{
+				//printf("\ndelete %u", ip_ident2);
+				sip_fragment_age.erase(ip_ident2);
+				sip_fragment.erase(ip_ident2);
+				it1 = sip_fragment.begin();
+				continue;
+			}
+			++it1;
+    	}
+		counter_l=0;
+	}
+
+
+
+
+
 	wait_for_more = false;
 	string query_part1 = "INSERT INTO " + dbname + ".sip (`callid`, `datetime`, \
   `srcip`, `srcport`, `dstip`, `dstport`, `content`) VALUES ";
@@ -207,6 +251,7 @@ void packet_handler(u_char *dumpfile, const struct pcap_pkthdr *header, const u_
 	char timestr[64];
 	char usec[76];
 	int b = 0;
+	u_short tlen =0;
 
 	memset(udpstrtmp, '\0', sizeof(udpstrtmp));
 	memset(udpstrtmp2, '\0', sizeof(udpstrtmp2));
@@ -258,7 +303,7 @@ void packet_handler(u_char *dumpfile, const struct pcap_pkthdr *header, const u_
 		UDPdata = (udp_data *)((u_char *)th + tcpudplen);
 		sport = ntohs(th->sport);
 		dport = ntohs(th->dport);
-		u_short tlen = ntohs(ih->tlen);
+		tlen = ntohs(ih->tlen);
 		len = tlen - ip_len - tcpudplen;
 	}
 
@@ -277,7 +322,7 @@ void packet_handler(u_char *dumpfile, const struct pcap_pkthdr *header, const u_
 		UDPdata = (udp_data *)((u_char *)uh + tcpudplen);
 		sport = ntohs(uh->sport);
 		dport = ntohs(uh->dport);
-		u_short tlen = ntohs(ih->tlen);
+		tlen = ntohs(ih->tlen);
 		len = tlen - ip_len - 8;
 	}
 
@@ -296,6 +341,8 @@ void packet_handler(u_char *dumpfile, const struct pcap_pkthdr *header, const u_
 			memset(udpstrtmp, '\0', sizeof(udpstrtmp));
 			memcpy(udpstrtmp, UDPdata, len);
 			sip_fragment.insert({ip_identification, string(udpstrtmp)});
+			size_t time_now = time(nullptr);
+			sip_fragment_age.insert({ip_identification, (uint)time_now});
 
 			/*
 			printf ("\n=============================== udpstrtmp when more fragments ==========================\n");
@@ -326,8 +373,34 @@ void packet_handler(u_char *dumpfile, const struct pcap_pkthdr *header, const u_
 			// check if fragment offset > 0 and previous packet exists
 			if (ip_fragment_offset > 0)
 			{
-				string content_old = sip_fragment.at(ip_identification);
-				sip_fragment.erase(ip_identification);
+				string content_old = "";
+   				try 
+				{
+      				content_old = sip_fragment.at(ip_identification);
+   				} catch(const out_of_range &e) 
+				{
+					cout << "\nException at " << e.what() << endl;
+					printf("\n===================================================================================\n");
+					cout << "\nip identification:" << ip_identification;
+					printf("\nip flags:%d", ip_flags);
+					printf("\nip_fragment_offset:%d", ip_fragment_offset);
+					printf("\nip len:%d", ip_len);
+					printf("\nip proto:%d", ip_proto);
+					printf("\ntlen:%d", tlen);
+					printf("\nlen:%d", len);
+					
+				
+					
+					//printf ("\n===== udpstrtmp ==========================================================================\n");
+					//for(int i = 0; i < 200; i++)
+					//{
+					//	printf("%02x ", udpstrtmp[i]);
+					//}
+      	
+   				}
+
+
+				//sip_fragment.erase(ip_identification);
 				string content_tmp = content_old + string(udpstrtmp);
 				memset(udpstrtmp, '\0', sizeof(udpstrtmp));
 				strcpy(udpstrtmp, content_tmp.c_str());
