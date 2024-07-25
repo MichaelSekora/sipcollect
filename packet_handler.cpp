@@ -356,7 +356,18 @@ void packet_handler(u_char *dumpfile, const struct pcap_pkthdr *header, const u_
 		else
 		{
 			memset(udpstrtmp, '\0', sizeof(udpstrtmp));
-			memcpy(udpstrtmp, UDPdata, len);
+
+			if (ip_fragment_offset > 0)
+			{
+				memcpy(udpstrtmp, UDPdata, len+8);
+			}
+			else
+			{
+				memcpy(udpstrtmp, UDPdata, len);
+			}
+			
+			
+			
 			int i2 = 0;
 			for (int i = 0; i < sizeof(udpstrtmp); i++)
 			{
@@ -374,10 +385,10 @@ void packet_handler(u_char *dumpfile, const struct pcap_pkthdr *header, const u_
 			if (ip_fragment_offset > 0)
 			{
 				string content_old = "";
-   				try 
+   			try 
 				{
-      				content_old = sip_fragment.at(ip_identification);
-   				} catch(const out_of_range &e) 
+      			content_old = sip_fragment.at(ip_identification);
+   			} catch(const out_of_range &e) 
 				{
 					cout << "\nException at " << e.what() << endl;
 					printf("\n===================================================================================\n");
@@ -397,13 +408,22 @@ void packet_handler(u_char *dumpfile, const struct pcap_pkthdr *header, const u_
 					//	printf("%02x ", udpstrtmp[i]);
 					//}
       	
-   				}
+   			}
 
 
 				//sip_fragment.erase(ip_identification);
 				string content_tmp = content_old + string(udpstrtmp);
 				memset(udpstrtmp, '\0', sizeof(udpstrtmp));
 				strcpy(udpstrtmp, content_tmp.c_str());
+
+				//printf ("\n===== udpstrtmp when more fragments ======================================================\n");
+				//printf ("\n%s", udpstrtmp);
+				//printf ("\n===== udpstrtmp ==========================================================================\n");
+				//for(int i = 0; i < 2000; i++)
+				//{
+				//	printf("%02x ", udpstrtmp[i]);
+				//}
+      	
 			}
 
 			char *callid = extractheader(udpstrtmp, (char *)"\nCall-ID:");
