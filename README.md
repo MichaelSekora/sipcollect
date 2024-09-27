@@ -4,8 +4,8 @@ collects sip-packets and stores them in mysql
 sipcollect traces VoIP sip-messages, extracts the Call-ID and stores every individial message in a mysql-table.\
 Most Call-Detail-Records (CDR) of Voice Switches include the Call-ID of every Call-Leg.\
 By referencing to the mysql-records with that Call-ID you have all relevant signaling messages of that Call.\
-Usually, you would then display the sip-messages in a web-application showing the message-flow.
-Reassembles fragmented packets for UDP as well. (recently, SIP-messages are getting quite large)
+Usually, you would then display the sip-messages in a web-application showing the message-flow.\
+Reassembles fragmented packets for UDP as well. (recently, SIP-messages are getting quite large)\\
 If you need assistance feel free to contact me.
 
 ## INSTALLATION
